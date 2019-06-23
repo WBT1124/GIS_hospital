@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="utf-8" />
+		<meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no" />
+		<title>Intro to SceneView - Create a 3D map - 4.11</title>
+		<style>
+			html,
+			body,
+			#viewDiv {
+				padding: 0;
+				margin: 0;
+				height: 100%;
+				width: 100%;
+			}
+		</style>
+
+		<link rel="stylesheet" href="http://cdn.amazeui.org/amazeui/2.7.2/css/amazeui.css">
+		<script src="https://code.jquery.com/jquery-3.1.1.min.js"></script>
+		<script src="http://cdn.amazeui.org/amazeui/2.7.2/js/amazeui.js"></script>
+		<link rel="stylesheet" href="https://js.arcgis.com/4.11/esri/themes/light/main.css" />
+		<script src="https://js.arcgis.com/4.11/"></script>
+
+
+	</head>
+
+	<body>
+		<div id="viewDiv">
+		</div>
+		<div class="am-dropdown am-dropdown-left" data-am-dropdown style="position:absolute;top : 5%;left: 90% ! important;">
+			<button class="am-btn am-btn-secondary am-dropdown-toggle" data-am-dropdown-toggle>地图选择<span class="am-icon-caret-down"></span></button>
+			<ul class="am-dropdown-content">
+				<li><a onclick="changemap(this)">topo</a></li>
+				<li><a onclick="changemap(this)">gray</a></li>
+				<li><a onclick="changemap(this)">streets-navigation-vector</a></li>
+				<li><a onclick="changemap(this)">oceans</a></li>
+				<li><a onclick="changemap(this)">satellite</a></li>
+				<li><a onclick="changemap(this)">osm</a></li>
+			</ul>
+		</div>
+		<button type="button" class="am-btn am-btn-secondary am-radius" style="position:absolute;top : 10%;left: 90% ! important;"
+		 onclick="btn_hos()">医院查询</button>
+		<button type="button" class="am-btn am-btn-secondary am-radius" style="position:absolute;top : 15%;left: 90% ! important;"
+		 onclick="btn_house()">居民点近邻医院查询</button>
+		<div id="hosselect" style="position:absolute;top : 10%;left: 13% ! important; visibility: hidden;">
+			<select id="sle_hos" onchange="queryhos()">
+				<option value="0">请选择医院</option>
+				<option value="湖北省中西医结合医院">湖北中西结合医院</option>
+				<option value="武汉广爱医院">广爱医院</option>
+				<option value="商职医院">商职医院</option>
+				<option value="武汉市红十字会医院">红十字会医院</option>
+				<option value="江汉中西医结合医院">江汉中西结合医院</option>
+				<option value="武汉市怡和医院">怡和医院</option>
+				<option value="武汉百姓医院">武汉百姓医院</option>
+				<option value="华中科技大学同济医学院附属协和医院">华科附属协和医院</option>
+				<option value="武汉中阳中医医院">中阳中医医院</option>
+				<option value="武汉市优抚医院">武汉优抚医院</option>
+				<option value="武汉华茂医院">华茂医院</option>
+				<option value="武汉市中心医院">武汉市中心医院后湖院区</option>
+			</select>
+
+		</div>
+	</body>
+	<script>
+		require(["esri/Map", "esri/views/SceneView", "esri/layers/CSVLayer", "esri/layers/support/Field",
+			"esri/renderers/ClassBreaksRenderer", "esri/widgets/Legend", "esri/tasks/support/Query"
+		], function(Map, SceneView, CSVLayer, Field, ClassBreaksRenderer, Legend, Query) {
+			var hos = 0;
+			var house = 0;
+			var map = new Map({
+				basemap: "osm",
+				ground: "world-elevation"
+			});
+
+			var view = new SceneView({
+				container: "viewDiv",
+				map: map,
+				scale: 500000,
+				center: [114.3109950482318, 30.58113311958895]
+			});
+
+			var fields = [
+				new Field({
+					"name": "name",
+					"alias": "医院",
+					"type": "string"
+				}), new Field({
+					"name": "wgs84lon",
+					"alias": "lon",
+					"type": "double"
+				}), new Field({
+					"name": "wgs84lat",
+					"alias": "lat",
+					"type": "double"
+				}), new Field({
+					"name": "bed",
+					"alias": "床位数",
+					"type": "double"
+				})
+			];
+
+			const less50 = {
+				type: "simple-marker",
+				style: "circle",
+				color: "#FF6A6A",
+				size: "20px",
+				outline: {
+					width: 0.2,
+					color: [255, 200, 200]
+				}
+			};
+
+			const more50 = {
+				type: "simple-marker",
+				style: "circle",
+				color: "#FF6A6A",
+				size: "40px",
+
+				outline: {
+					width: 0.2,
+					color: [255, 255, 255, 0.5]
+				}
+			};
+
+			const more75 = {
+				type: "simple-marker",
+				style: "circle",
+				color: "#FF6A6A",
+				size: "50px",
+				outline: {
+					width: 0.2,
+					color: [255, 255, 255, 0.5]
+				}
+			};
+
+
+
+			const renderer = {
+				type: "class-breaks", // autocasts as new ClassBreaksRenderer()
+				field: "bed",
+				legendOptions: {
+					title: "各医院床位数量统计"
+				},
+
+				defaultLabel: "no data",
+				classBreakInfos: [{
+						minValue: 0,
+						maxValue: 300,
+						symbol: less50,
+						label: "< 35%"
+					},
+					{
+						minValue: 300,
+						maxValue: 1000,
+						symbol: more50,
+						label: "35 - 50%"
+					},
+					{
+						minValue: 1000,
+						maxValue: 4800,
+						symbol: more75,
+						label: "50 - 75%"
+					}
+				]
+			};
+
+
+			const legend = new Legend({
+				view: view
+			});
+
+			view.ui.add(legend, "bottom-left");
+
+
+
+			var csvlayer = new CSVLayer({
+				url: "https://wbt1124.github.io/GIS_hospital/hospital.csv",
+				longitudeField: "wgs84lon",
+				latitudeField: "wgs84lat",
+				fields: fields,
+				popupEnabled: true,
+				title: "江汉区医院分布",
+				renderer: renderer,
+
+			});
+			var househl;
+			var hl;
+			var houselayer = new CSVLayer({
+				url: "https://wbt1124.github.io/GIS_hospital/house.csv",
+				longitudeField: "lon",
+				latitudeField: "lat",
+				title: "江汉区居民点",
+				highlightOptions: {
+					color: [155, 255, 127, 1],
+					haloOpacity: 0.9,
+					fillOpacity: 0.2
+				}
+
+				// fields: fields,
+			});
+
+
+
+			var pop = csvlayer.createPopupTemplate()
+			csvlayer.popupTemplate = pop;
+			map.add(csvlayer)
+			map.add(houselayer)
+
+			mapclick = function(event) {
+				// console.log(event)
+				var query = houselayer.createQuery();
+				query.geometry = view.toMap(event); // the point location of the pointer
+				query.spatialRelationship = "intersects"; // this is the default
+				query.returnGeometry = true;
+				query.distance = 50;
+				query.units = "meters";
+				view.whenLayerView(houselayer).then(function(houseview){
+					houselayer.queryFeatures(query)
+										.then(function(response) {
+											if (response.features[0] != null) {
+												if(househl!=null){
+													househl.remove()
+												}
+												househl= houseview.highlight(response.features[0])
+												var house = response.features["0"].attributes.name
+												var geometry = response.features[0].geometry
+					
+												var qfrohousetohos = csvlayer.createQuery();
+												qfrohousetohos.geometry = geometry // the point location of the pointer
+												qfrohousetohos.spatialRelationship = "intersects"; // this is the default
+												qfrohousetohos.returnGeometry = true;
+												qfrohousetohos.distance = 2;
+												qfrohousetohos.units = "kilometers";
+													view.whenLayerView(csvlayer).then(function(hosview){
+														csvlayer.queryFeatures(qfrohousetohos).then(function(data) {
+															if(hl!=null){
+																hl.remove()
+															}
+															hl = hosview.highlight(data.features)
+															var num = data.features.length
+															if(num==0){
+																alert("该居民区："+house+"1.5km内未发现医院")
+															}else{
+																
+																alert("该居民区："+house+"1.5km内共发现医院"+num+"家")
+															}
+															console.log(data)
+															console.log(house)
+														})
+													})
+												
+											} else {
+												alert("当前未选中居民区")
+												return;
+											}
+										});
+				})
+				// query.outFields = [ "POPULATION" ];
+
+
+				
+				// The layerview for the layer
+
+
+
+				console.log("？？？？")
+				c.remove()
+			};
+
+
+			var c;
+			btn_house = function() {
+				c = view.on("click", mapclick)
+
+
+			}
+
+
+			changemap = function(item) {
+				map.basemap = item.innerText;
+			}
+
+			btn_hos = function() {
+				if (hos == 0) {
+					document.getElementById("hosselect").style.visibility = "visible"
+					hos = 1
+				} else {
+					document.getElementById("hosselect").style.visibility = "hidden"
+					hos = 0;
+				}
+				console.log(view)
+			}
+			
+			queryhos = function() {
+				console.log("??")
+				var hosname = document.getElementById("sle_hos").value;
+				if (hosname == 0) {
+					alert("请选择医院！")
+					return;
+				} else {
+					var querystr = "name = " + "'" + hosname + "'"
+					var query = csvlayer.createQuery();
+					query.where = querystr;
+					view.whenLayerView(csvlayer)
+						.then(function(layerView) {
+							csvlayer.queryFeatures(query)
+								.then(function(response) {
+
+									if (hl != null) {
+										hl.remove()
+										hl = layerView.highlight(response.features)
+										view.go
+									} else {
+										hl = layerView.highlight(response.features)
+									}
+								});
+							// The layerview for the layer
+						})
+				}
+
+			}
+
+		});
+	</script>
+</html>
